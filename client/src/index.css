@@ -193,4 +193,24 @@
     background-color: #d1d5db;
     border-radius: 3px;
   }
+
+  /* Infinite Scrolling Marquee Ticker */
+  @keyframes marquee {
+    0% { transform: translateX(0%); }
+    100% { transform: translateX(-50%); }
+  }
+
+  .animate-marquee {
+    display: flex;
+    width: max-content;
+    animation: marquee 45s linear infinite;
+  }
+
+  .animate-marquee-paused {
+    animation-play-state: paused !important;
+  }
+
+  .animate-marquee:hover {
+    animation-play-state: paused;
+  }
 }
