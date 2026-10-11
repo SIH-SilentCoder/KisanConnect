@@ -37,6 +37,9 @@ function initLocalStorage() {
   }
 }
 
+// Initialize local storage immediately
+initLocalStorage();
+
 function saveLocalDb() {
   try {
     if (!fs.existsSync(DATA_DIR)) {

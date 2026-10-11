@@ -3,37 +3,44 @@ import { Link, useNavigate, useLocation } from 'react-router-dom';
 import { 
   Eye, 
   EyeOff, 
-  Phone, 
-  Lock, 
   Wheat, 
   ArrowRight, 
   BadgeCheck, 
   Users, 
   KeyRound, 
-  Send, 
-  Check, 
   ShieldCheck, 
   Sparkles, 
   Building2, 
-  Landmark, 
-  ChevronRight, 
-  CheckCircle2, 
   Clock, 
-  CreditCard, 
-  HelpCircle,
-  Zap,
-  ChevronDown,
-  ChevronUp,
-  Shield,
-  Award,
-  Smartphone
+  Zap, 
+  ChevronDown, 
+  ChevronUp, 
+  Globe, 
+  Home, 
+  Video, 
+  Bot, 
+  CheckCircle2,
+  Menu,
+  X,
+  Phone,
+  Lock,
+  RotateCcw
 } from 'lucide-react';
-import { useAuth, ROLES, ROLE_LABELS } from '../../context/AuthContext';
+import { useAuth } from '../../context/AuthContext';
 import { authService } from '../../services';
 import { extractError } from '../../utils/constants';
 import toast from 'react-hot-toast';
-import Button from '../../components/common/Button';
-import Input from '../../components/common/Input';
+
+const LANGUAGES = [
+  { code: 'ar', label: 'العربية' },
+  { code: 'bn', label: 'বাংলা' },
+  { code: 'en', label: 'English' },
+  { code: 'es', label: 'Español' },
+  { code: 'fr', label: 'Français' },
+  { code: 'hi', label: 'हिन्दी' },
+  { code: 'pa', label: 'ਪੰਜਾਬੀ' },
+  { code: 'pt', label: 'Português' },
+];
 
 const DEMO_CATEGORIES = [
   { id: 'farmer', label: '🌾 Farmer' },
@@ -44,17 +51,16 @@ const DEMO_CATEGORIES = [
 
 const DEMO_CREDENTIALS = {
   farmer: [
-    { label: 'Farmer (Ram Singh)', mobile: '9751000001', sub: 'OTP: 123456 (Auto-filled)', tag: 'Farmer' }
+    { label: 'Farmer (Ram Singh)', mobile: '9751000001', otp: '123456', pwd: 'Farmer@123', sub: 'OTP: 123456 / Pass: Farmer@123', tag: 'Farmer' }
   ],
   admin: [
-    { label: 'Central Admin', id: 'CPO-001', pwd: 'Admin@123', sub: 'Full Governance & Settings', tag: 'Central Admin' },
-    { label: 'State Officer (Punjab)', id: 'SPO-PB-001', pwd: 'Kisan@123', sub: 'Punjab State Nodal Officer', tag: 'State Admin' },
-    { label: 'State Officer (UP)', id: 'SPO-UP-001', pwd: 'Kisan@123', sub: 'Uttar Pradesh State Nodal Officer', tag: 'State Admin' },
-    { label: 'State Officer (MP)', id: 'SPO-MP-001', pwd: 'Kisan@123', sub: 'Madhya Pradesh State Nodal Officer', tag: 'State Admin' },
+    { label: 'Central Admin', id: 'CPO-001', pwd: 'Admin@123', sub: 'Dr. Ramesh Kumar (Central Head)', tag: 'Central Admin' },
+    { label: 'State Officer (Punjab)', id: 'SPO-PUN-001', pwd: 'Kisan@123', sub: 'Sardar Jaspreet Singh (Punjab)', tag: 'State Admin' },
+    { label: 'State Officer (MP)', id: 'SPO-MP-001', pwd: 'Kisan@123', sub: 'Shri Dinesh Verma (Madhya Pradesh)', tag: 'State Admin' },
   ],
   district: [
     { label: 'District Officer (Ludhiana)', id: 'DNO-LDH-001', pwd: 'Kisan@123', sub: 'District Procurement Oversight', tag: 'District' },
-    { label: 'Centre Head (Ludhiana Main)', id: 'PCH-LDH-001', pwd: 'Kisan@123', sub: 'Centre Operations Supervisor', tag: 'Centre Head' },
+    { label: 'Centre Head (Ludhiana)', id: 'PCH-LDH-001', pwd: 'Kisan@123', sub: 'Centre Operations Supervisor', tag: 'Centre Head' },
   ],
   staff: [
     { label: 'Procurement Officer', id: 'PO-LDH-001', pwd: 'Kisan@123', sub: 'Slot & Paddy Verification', tag: 'Officer' },
@@ -64,7 +70,15 @@ const DEMO_CREDENTIALS = {
 };
 
 const LoginPage = () => {
-  const [loginMode, setLoginMode] = useState('farmer'); // 'farmer' | 'officer'
+  // Navigation tabs: 'login' | 'reset'
+  const [activeTab, setActiveTab] = useState('login');
+  // Persona type: 'farmer' (OTP/Password) | 'officer' (Password)
+  const [loginMode, setLoginMode] = useState('farmer');
+  const [farmerAuthType, setFarmerAuthType] = useState('otp'); // 'otp' | 'password'
+  const [selectedLang, setSelectedLang] = useState('en');
+  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+
+  // Form states
   const [form, setForm] = useState({ mobile: '', otp: '', employeeId: '', password: '' });
   const [otpSent, setOtpSent] = useState(false);
   const [sendingOtp, setSendingOtp] = useState(false);
@@ -75,6 +89,10 @@ const LoginPage = () => {
   const [errors, setErrors] = useState({});
   const [showDemoDrawer, setShowDemoDrawer] = useState(true);
   const [activeDemoCategory, setActiveDemoCategory] = useState('farmer');
+
+  // Reset password states
+  const [resetIdentifier, setResetIdentifier] = useState('');
+  const [resetSubmitted, setResetSubmitted] = useState(false);
 
   const { login, user, isAuthenticated } = useAuth();
   const navigate = useNavigate();
@@ -120,9 +138,12 @@ const LoginPage = () => {
       const res = await authService.sendOtp({ mobile: form.mobile });
       setOtpSent(true);
       const demo = res.data?.data?.demoOtp;
-      if (demo) setCurrentDemoOtp(demo);
-      toast.success(res.data.message || `OTP dispatched to +91 ${form.mobile}`);
-      setCountdown(res.data.data?.resendCooldown || 60);
+      if (demo) {
+        setCurrentDemoOtp(demo);
+        setForm((prev) => ({ ...prev, otp: demo }));
+      }
+      toast.success(res.data?.message || `OTP dispatched to +91 ${form.mobile}`);
+      setCountdown(res.data?.data?.resendCooldown || 60);
     } catch (err) {
       toast.error(extractError(err));
     } finally {
@@ -134,16 +155,22 @@ const LoginPage = () => {
     const errs = {};
     if (loginMode === 'farmer') {
       if (!/^[6-9]\d{9}$/.test(form.mobile)) {
-        errs.mobile = 'Enter a valid 10-digit mobile number';
+        errs.mobile = 'Enter a valid 10-digit Indian mobile number';
       }
-      if (!form.otp.trim()) {
-        errs.otp = 'Please enter the 6-digit OTP';
-      } else if (!/^\d{6}$/.test(form.otp.trim())) {
-        errs.otp = 'OTP must be exactly 6 digits';
+      if (farmerAuthType === 'otp') {
+        if (!form.otp.trim()) {
+          errs.otp = 'Please enter the 6-digit OTP';
+        } else if (!/^\d{6}$/.test(form.otp.trim())) {
+          errs.otp = 'OTP must be exactly 6 digits';
+        }
+      } else {
+        if (!form.password) {
+          errs.password = 'Password is required for password login';
+        }
       }
     } else {
       if (!form.employeeId.trim()) {
-        errs.employeeId = 'Employee ID is required (e.g. CPO-001)';
+        errs.employeeId = 'Official Employee ID is required (e.g. CPO-001)';
       }
       if (!form.password) {
         errs.password = 'Password is required';
@@ -163,14 +190,16 @@ const LoginPage = () => {
     try {
       const credentials =
         loginMode === 'farmer'
-          ? { mobile: form.mobile.trim(), otp: form.otp.trim() }
-          : { employeeId: form.employeeId.toUpperCase(), password: form.password };
+          ? (farmerAuthType === 'otp'
+              ? { mobile: form.mobile.trim(), otp: form.otp.trim() }
+              : { mobile: form.mobile.trim(), password: form.password })
+          : { employeeId: form.employeeId.toUpperCase().trim(), password: form.password };
 
-      const user = await login(credentials);
-      toast.success(`Welcome back, ${user.name.split(' ')[0]}!`);
+      const loggedUser = await login(credentials);
+      toast.success(`Welcome back, ${loggedUser.name ? loggedUser.name.split(' ')[0] : 'User'}!`);
 
-      if (user.mustChangePassword) {
-        toast('Please change your default password.', { icon: '🔐', duration: 5000 });
+      if (loggedUser.mustChangePassword) {
+        toast('Please update your default password in Profile settings.', { icon: '🔐', duration: 5000 });
       }
 
       if (from) {
@@ -187,7 +216,7 @@ const LoginPage = () => {
           state_officer: '/admin/dashboard',
           central_admin: '/admin/dashboard',
         };
-        navigate(redirectMap[user.role] || '/');
+        navigate(redirectMap[loggedUser.role] || '/');
       }
     } catch (err) {
       toast.error(extractError(err));
@@ -198,12 +227,20 @@ const LoginPage = () => {
   };
 
   const fillDemo = (credentials) => {
+    setActiveTab('login');
+    setErrors({});
     if (credentials.mobile) {
       setLoginMode('farmer');
+      setFarmerAuthType('otp');
       setActiveDemoCategory('farmer');
-      setForm({ mobile: credentials.mobile, otp: '123456', employeeId: '', password: '' });
+      setForm({
+        mobile: credentials.mobile,
+        otp: credentials.otp || '123456',
+        employeeId: '',
+        password: credentials.pwd || 'Farmer@123'
+      });
       setOtpSent(true);
-      setCurrentDemoOtp('123456');
+      setCurrentDemoOtp(credentials.otp || '123456');
       toast.success(`Farmer credentials loaded (${credentials.mobile})`, { icon: '🌾' });
     } else {
       setLoginMode('officer');
@@ -212,267 +249,378 @@ const LoginPage = () => {
     }
   };
 
+  const handleResetSubmit = (e) => {
+    e.preventDefault();
+    if (!resetIdentifier.trim()) {
+      toast.error('Please enter your mobile number or Employee ID');
+      return;
+    }
+    setResetSubmitted(true);
+    toast.success('Password reset instructions / OTP sent if account exists.');
+  };
+
   return (
-    <div className="min-h-screen bg-slate-950 font-sans flex text-slate-100 selection:bg-emerald-500 selection:text-white relative overflow-hidden">
+    <div className="min-h-screen bg-white text-slate-800 font-sans selection:bg-emerald-100 selection:text-emerald-900 flex flex-col justify-between overflow-x-hidden">
       
-      {/* Background Decorative Mesh & Glows */}
-      <div className="absolute top-0 left-0 w-full h-full overflow-hidden pointer-events-none z-0">
-        <div className="absolute -top-40 -left-40 w-96 h-96 bg-emerald-600/20 rounded-full blur-3xl" />
-        <div className="absolute top-1/2 left-1/3 w-[500px] h-[500px] bg-teal-500/10 rounded-full blur-3xl" />
-        <div className="absolute -bottom-40 right-10 w-96 h-96 bg-emerald-500/15 rounded-full blur-3xl" />
-        <div className="absolute inset-0 bg-[radial-gradient(#1e293b_1px,transparent_1px)] [background-size:24px_24px] opacity-30" />
-      </div>
-
-      <div className="relative z-10 flex w-full min-h-screen">
-        
-        {/* ── LEFT PANEL: Modern Government Branding & Feature Showcase ── */}
-        <div className="hidden lg:flex lg:w-7/12 bg-gradient-to-br from-slate-900 via-emerald-950/90 to-slate-900 border-r border-slate-800/80 p-12 flex-col justify-between relative">
+      {/* ── 1. TOP RESPONSIVE DARK BAR (LANGUAGES + LOGIN | REGISTER) ── */}
+      <header className="w-full bg-[#2c2d30] text-gray-200 text-xs sm:text-[13px] py-2 px-3 sm:px-6 md:px-8 border-b border-[#222]">
+        <div className="max-w-7xl mx-auto flex flex-col sm:flex-row items-center justify-between gap-2">
           
-          {/* Top Header & Emblem Badge */}
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="w-12 h-12 rounded-2xl bg-gradient-to-br from-emerald-400 to-teal-600 p-0.5 shadow-lg shadow-emerald-900/40">
-                <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center">
-                  <Wheat className="w-6 h-6 text-emerald-400" />
+          {/* Scrollable Language Selector on Mobile */}
+          <div className="w-full sm:w-auto flex items-center gap-x-3 overflow-x-auto scrollbar-none whitespace-nowrap py-0.5 text-gray-300 font-normal">
+            {LANGUAGES.map((lang) => (
+              <button
+                key={lang.code}
+                type="button"
+                onClick={() => setSelectedLang(lang.code)}
+                className={`transition-colors shrink-0 hover:text-white ${
+                  selectedLang === lang.code
+                    ? 'text-[#5ca130] font-semibold underline underline-offset-4 decoration-2'
+                    : 'text-gray-300'
+                }`}
+              >
+                {lang.label}
+              </button>
+            ))}
+          </div>
+
+          {/* Right Status Links */}
+          <div className="flex items-center gap-2.5 text-xs text-gray-300 self-end sm:self-auto shrink-0">
+            <button 
+              type="button"
+              onClick={() => setActiveTab('login')}
+              className="text-[#5ca130] font-semibold hover:underline"
+            >
+              Log In
+            </button>
+            <span className="text-gray-500">|</span>
+            <Link to="/register" className="hover:text-white transition">
+              Register
+            </Link>
+          </div>
+
+        </div>
+      </header>
+
+      {/* ── 2. BRAND NAVIGATION BAR (RESPONSIVE WITH MOBILE HAMBURGER) ── */}
+      <nav className="w-full bg-white border-b border-gray-200 py-3 px-3 sm:px-6 md:px-8 shadow-xs relative z-20">
+        <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
+          
+          {/* Brand Logo & Mascot Button */}
+          <div className="flex items-center gap-3 sm:gap-6">
+            <Link to="/" className="flex items-center gap-2 group">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-gradient-to-br from-emerald-500 to-lime-600 flex items-center justify-center p-0.5 shadow-xs">
+                <div className="w-full h-full bg-white rounded-full flex items-center justify-center">
+                  <Wheat className="w-5 h-5 text-emerald-600" />
                 </div>
               </div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span className="font-extrabold text-xl tracking-tight text-white">Kisan Procurement</span>
-                  <span className="text-[10px] font-bold uppercase tracking-wider bg-emerald-500/20 text-emerald-300 border border-emerald-500/30 px-2 py-0.5 rounded-full">
-                    Official Portal
-                  </span>
-                </div>
-                <p className="text-xs text-slate-400 font-medium">Digital Agriculture & MSP Queue Management</p>
+              <div className="flex flex-col">
+                <span className="text-lg sm:text-2xl font-bold tracking-tight text-slate-800 leading-none">
+                  Kisan<span className="text-emerald-700">Connect</span>
+                </span>
+                <span className="text-[10px] sm:text-[11px] font-medium text-slate-500 tracking-wide mt-0.5">
+                  Digital Agriculture Portal
+                </span>
               </div>
-            </div>
+            </Link>
 
-            <div className="flex items-center gap-2 text-xs text-slate-400 bg-slate-900/80 border border-slate-800 px-3 py-1.5 rounded-full backdrop-blur-md">
-              <Landmark className="w-3.5 h-3.5 text-emerald-400" />
-              <span>Govt. of India Initiative</span>
-            </div>
+            {/* Mascot: "Ask Agi / Krishi AI" */}
+            <Link
+              to="/farmer/ai-assistant"
+              className="hidden xs:flex items-center gap-1.5 px-2.5 py-1 sm:px-3 sm:py-1.5 rounded-full bg-lime-50 hover:bg-lime-100 border border-lime-200 text-lime-900 transition"
+              title="Click to chat with Krishi AI Assistant"
+            >
+              <div className="w-6 h-6 rounded-full bg-gradient-to-br from-lime-400 to-emerald-500 flex items-center justify-center text-slate-900 shadow-xs relative">
+                <Bot className="w-3.5 h-3.5 text-white" />
+                <span className="absolute -top-0.5 -right-0.5 flex h-2 w-2">
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
+                  <span className="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                </span>
+              </div>
+              <div className="flex items-center gap-1 text-[11px] sm:text-xs font-semibold text-emerald-800">
+                <Sparkles className="w-3 h-3 text-lime-600" />
+                <span>Ask Agi</span>
+              </div>
+            </Link>
           </div>
 
-          {/* Hero Pitch Section */}
-          <div className="my-auto py-8">
-            <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-emerald-500/10 border border-emerald-500/20 text-emerald-300 text-xs font-semibold mb-6">
-              <Sparkles className="w-3.5 h-3.5 text-emerald-400 animate-pulse" />
-              <span>Zero Waiting • 100% Transparency • Direct MSP Transfer</span>
-            </div>
-
-            <h1 className="text-4xl lg:text-5xl font-extrabold text-white leading-tight tracking-tight mb-6">
-              Empowering Farmers with <br />
-              <span className="bg-gradient-to-r from-emerald-400 via-teal-300 to-cyan-400 bg-clip-text text-transparent">
-                Smart Digital Procurement
-              </span>
-            </h1>
-
-            <p className="text-slate-300 text-base lg:text-lg leading-relaxed max-w-xl mb-10">
-              Book your procurement slot online, monitor live queue status at mandis, 
-              verify quality assessments digitally, and receive direct MSP payments.
-            </p>
-
-            {/* Feature Highlights Grid */}
-            <div className="grid grid-cols-2 gap-4 max-w-2xl">
-              {[
-                {
-                  icon: Clock,
-                  title: 'Smart Slot Booking',
-                  desc: 'Eliminate long mandi lines with scheduled gate entries.',
-                  color: 'text-amber-400',
-                  bg: 'bg-amber-500/10 border-amber-500/20'
-                },
-                {
-                  icon: ShieldCheck,
-                  title: 'Quality & MSP Assurance',
-                  desc: 'Transparent moisture test & automated price calculation.',
-                  color: 'text-emerald-400',
-                  bg: 'bg-emerald-500/10 border-emerald-500/20'
-                },
-                {
-                  icon: CreditCard,
-                  title: 'Direct Benefit Transfer',
-                  desc: 'Digitally verified payment directly to linked bank accounts.',
-                  color: 'text-teal-400',
-                  bg: 'bg-teal-500/10 border-teal-500/20'
-                },
-                {
-                  icon: Building2,
-                  title: 'Unified Officer Suite',
-                  desc: 'End-to-end state, district, and centre oversight.',
-                  color: 'text-cyan-400',
-                  bg: 'bg-cyan-500/10 border-cyan-500/20'
-                }
-              ].map((feat, idx) => (
-                <div 
-                  key={idx} 
-                  className="p-4 rounded-2xl bg-slate-900/60 border border-slate-800 backdrop-blur-sm hover:border-slate-700 transition-all group"
-                >
-                  <div className={`w-9 h-9 rounded-xl flex items-center justify-center mb-3 ${feat.bg} border`}>
-                    <feat.icon className={`w-5 h-5 ${feat.color}`} />
-                  </div>
-                  <h3 className="font-semibold text-white text-sm mb-1 group-hover:text-emerald-300 transition-colors">
-                    {feat.title}
-                  </h3>
-                  <p className="text-xs text-slate-400 leading-snug">
-                    {feat.desc}
-                  </p>
-                </div>
-              ))}
-            </div>
+          {/* Desktop Navigation Links */}
+          <div className="hidden lg:flex items-center gap-x-5 text-sm font-medium text-slate-700">
+            <Link to="/" className="flex items-center gap-1 hover:text-emerald-700 transition">
+              <Home className="w-4 h-4 text-slate-500" />
+              <span>Home</span>
+            </Link>
+            <span className="hover:text-emerald-700 cursor-pointer flex items-center gap-1">
+              Mandi Rates <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </span>
+            <span className="hover:text-emerald-700 cursor-pointer flex items-center gap-1">
+              About Us <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </span>
+            <span className="hover:text-emerald-700 cursor-pointer flex items-center gap-1">
+              How To... <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </span>
+            <span className="hover:text-emerald-700 cursor-pointer flex items-center gap-1">
+              Resources <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </span>
+            <span className="hover:text-emerald-700 cursor-pointer flex items-center gap-1">
+              Impact <ChevronDown className="w-3.5 h-3.5 text-slate-400" />
+            </span>
+            <a
+              href="tel:18001801551"
+              className="text-[#4da622] font-bold hover:text-emerald-800 transition"
+            >
+              » Helpline
+            </a>
           </div>
 
-          {/* Bottom Trust Metrics Footer */}
-          <div className="pt-6 border-t border-slate-800/80 flex items-center justify-between text-xs text-slate-400">
-            <div className="flex items-center gap-6">
-              <span className="flex items-center gap-1.5">
-                <CheckCircle2 className="w-4 h-4 text-emerald-400" />
-                Real-time Queue Tracking
-              </span>
-              <span className="flex items-center gap-1.5">
-                <Shield className="w-4 h-4 text-emerald-400" />
-                256-bit Bank Encryption
-              </span>
-            </div>
-            <p className="text-slate-500">v2.4 Digital Krishi System</p>
+          {/* Mobile Hamburger Button */}
+          <div className="flex items-center gap-2 lg:hidden">
+            <Link
+              to="/farmer/ai-assistant"
+              className="xs:hidden p-2 rounded-lg bg-lime-50 text-emerald-700 border border-lime-200"
+              title="Ask Agi AI"
+            >
+              <Bot className="w-4 h-4" />
+            </Link>
+            <button
+              type="button"
+              onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
+              className="p-2 rounded-lg text-slate-600 hover:text-slate-900 hover:bg-gray-100 transition"
+              aria-label="Toggle navigation menu"
+            >
+              {isMobileMenuOpen ? <X className="w-5 h-5" /> : <Menu className="w-5 h-5" />}
+            </button>
           </div>
+
         </div>
 
-        {/* ── RIGHT PANEL: Main Login Card & Demo Selector ── */}
-        <div className="flex-1 flex flex-col justify-between p-6 sm:p-10 lg:p-12 overflow-y-auto bg-slate-950">
+        {/* Mobile Dropdown Menu Drawer */}
+        {isMobileMenuOpen && (
+          <div className="lg:hidden mt-3 pt-3 border-t border-gray-100 flex flex-col gap-2.5 text-sm font-medium text-slate-700 animate-fade-in bg-white">
+            <Link to="/" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 py-1.5 px-2 rounded hover:bg-gray-50">
+              <Home className="w-4 h-4 text-emerald-600" />
+              <span>Home</span>
+            </Link>
+            <Link to="/farmer/book-slot" onClick={() => setIsMobileMenuOpen(false)} className="py-1.5 px-2 rounded hover:bg-gray-50">
+              Mandi Rates &amp; Slot Booking
+            </Link>
+            <Link to="/register" onClick={() => setIsMobileMenuOpen(false)} className="py-1.5 px-2 rounded hover:bg-gray-50">
+              Farmer New Registration
+            </Link>
+            <Link to="/farmer/ai-assistant" onClick={() => setIsMobileMenuOpen(false)} className="flex items-center gap-2 py-1.5 px-2 rounded text-emerald-700 bg-lime-50 font-semibold">
+              <Sparkles className="w-4 h-4" />
+              <span>Ask Agi / Krishi AI Assistant</span>
+            </Link>
+            <a href="tel:18001801551" className="py-1.5 px-2 text-[#4da622] font-bold">
+              » Toll-Free Kisan Helpline (1800-180-1551)
+            </a>
+          </div>
+        )}
+      </nav>
+
+      {/* ── 3. RESPONSIVE KEY STATS RIBBON (2x2 on Mobile, 4-col on Desktop) ── */}
+      <section className="w-full bg-[#f6f8f6] border-b border-gray-200/90 py-3 px-3 sm:px-6 md:px-8">
+        <div className="max-w-6xl mx-auto grid grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4 text-xs sm:text-[13px] text-slate-700 font-medium">
           
-          {/* Mobile Header */}
-          <div className="flex items-center justify-between lg:hidden mb-8">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 bg-emerald-500 rounded-xl flex items-center justify-center shadow-lg shadow-emerald-500/20">
-                <Wheat className="w-5 h-5 text-slate-950" />
-              </div>
-              <div>
-                <span className="font-bold text-white text-base block leading-none">Kisan Connect</span>
-                <span className="text-[10px] text-slate-400 font-medium">Digital Procurement</span>
-              </div>
-            </div>
-            <span className="text-[10px] font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20 px-2.5 py-1 rounded-full">
-              Govt Portal
-            </span>
+          <div className="flex items-center gap-2">
+            <Users className="w-4 h-4 text-[#5ca130] shrink-0" />
+            <span className="leading-tight"><strong className="text-slate-900 font-bold block sm:inline">12.5M+</strong> farmers connected</span>
           </div>
 
-          <div className="w-full max-w-md mx-auto my-auto">
-            
-            {/* Title Section */}
-            <div className="mb-8">
-              <div className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-slate-900 border border-slate-800 text-[11px] font-medium text-slate-400 mb-3">
-                <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
-                <span>Secure Authentication Gateway</span>
+          <div className="flex items-center gap-2">
+            <Building2 className="w-4 h-4 text-[#5ca130] shrink-0" />
+            <span className="leading-tight"><strong className="text-slate-900 font-bold block sm:inline">840+</strong> mandis in 28 states</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Video className="w-4 h-4 text-[#5ca130] shrink-0" />
+            <span className="leading-tight"><strong className="text-slate-900 font-bold block sm:inline">6,529+</strong> daily MSP trades</span>
+          </div>
+
+          <div className="flex items-center gap-2">
+            <Globe className="w-4 h-4 text-[#5ca130] shrink-0" />
+            <span className="leading-tight"><strong className="text-slate-900 font-bold block sm:inline">12+</strong> languages supported</span>
+          </div>
+
+        </div>
+      </section>
+
+      {/* ── 4. MAIN RESPONSIVE FORM CARD CONTAINER ── */}
+      <main className="flex-1 py-8 sm:py-12 md:py-14 px-3 sm:px-6 bg-white flex flex-col justify-center">
+        <div className="w-full max-w-xl mx-auto">
+          
+          {/* TAB HEADERS: [ Log in ]  [ Create new account ]  [ Reset your password ] */}
+          <div className="flex items-center gap-4 sm:gap-8 border-b border-gray-200 text-sm sm:text-base font-normal pb-1 mb-6 sm:mb-8 overflow-x-auto scrollbar-none whitespace-nowrap">
+            <button
+              type="button"
+              onClick={() => setActiveTab('login')}
+              className={`pb-2 font-medium transition-colors relative shrink-0 ${
+                activeTab === 'login'
+                  ? 'text-[#5ca130] border-b-2 border-[#5ca130] font-semibold'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              Log in
+            </button>
+
+            <Link
+              to="/register"
+              className="pb-2 text-slate-600 hover:text-[#5ca130] hover:underline transition-colors shrink-0"
+            >
+              Create new account
+            </Link>
+
+            <button
+              type="button"
+              onClick={() => setActiveTab('reset')}
+              className={`pb-2 transition-colors shrink-0 ${
+                activeTab === 'reset'
+                  ? 'text-[#5ca130] border-b-2 border-[#5ca130] font-semibold'
+                  : 'text-slate-600 hover:text-[#5ca130] hover:underline'
+              }`}
+            >
+              Reset your password
+            </button>
+          </div>
+
+          {/* TAB CONTENT: 1. LOG IN */}
+          {activeTab === 'login' && (
+            <div className="w-full">
+              
+              {/* Persona Switcher Tabs (Farmer vs Mandi Officer) */}
+              <div className="mb-5 sm:mb-6 p-1 bg-gray-100 rounded-xl grid grid-cols-2 gap-1 text-xs sm:text-sm font-semibold">
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('farmer'); setErrors({}); }}
+                  className={`flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-lg transition ${
+                    loginMode === 'farmer'
+                      ? 'bg-[#5ca130] text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <Wheat className="w-4 h-4" />
+                  <span>Farmer Login</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => { setLoginMode('officer'); setErrors({}); }}
+                  className={`flex items-center justify-center gap-1.5 py-2 sm:py-2.5 rounded-lg transition ${
+                    loginMode === 'officer'
+                      ? 'bg-[#026cb6] text-white shadow-xs font-bold'
+                      : 'text-slate-600 hover:text-slate-900'
+                  }`}
+                >
+                  <BadgeCheck className="w-4 h-4" />
+                  <span>Officer &amp; Staff</span>
+                </button>
               </div>
-              <h2 className="text-2xl sm:text-3xl font-bold text-white tracking-tight">
-                Sign in to your account
-              </h2>
-              <p className="text-slate-400 text-sm mt-1.5">
-                {loginMode === 'farmer'
-                  ? 'Access your slot bookings, queue tokens, and payment history.'
-                  : 'Access official procurement administration & gate controls.'}
-              </p>
-            </div>
 
-            {/* Login Mode Switcher Tabs */}
-            <div className="grid grid-cols-2 p-1.5 bg-slate-900/90 border border-slate-800/90 rounded-2xl mb-8">
-              <button
-                type="button"
-                onClick={() => { setLoginMode('farmer'); setErrors({}); }}
-                className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200
-                  ${loginMode === 'farmer'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-lg shadow-emerald-500/20 font-bold'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
-              >
-                <Wheat className="w-4 h-4" />
-                Farmer Login
-              </button>
-
-              <button
-                type="button"
-                onClick={() => { setLoginMode('officer'); setErrors({}); }}
-                className={`flex items-center justify-center gap-2 py-3 rounded-xl text-xs sm:text-sm font-semibold transition-all duration-200
-                  ${loginMode === 'officer'
-                    ? 'bg-gradient-to-r from-emerald-500 to-teal-600 text-slate-950 shadow-lg shadow-emerald-500/20 font-bold'
-                    : 'text-slate-400 hover:text-white hover:bg-slate-800/50'}`}
-              >
-                <BadgeCheck className="w-4 h-4" />
-                Officer & Staff
-              </button>
-            </div>
-
-            {/* Login Form */}
-            <form onSubmit={handleSubmit} className="space-y-5" noValidate>
-              {loginMode === 'farmer' ? (
-                <div className="space-y-4">
-                  {/* Phone Input with OTP Send Button */}
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                      Registered Mobile Number <span className="text-emerald-400">*</span>
-                    </label>
-                    <div className="flex gap-2">
-                      <div className="relative flex-1">
-                        <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1.5 text-slate-400 border-r border-slate-700 pr-2">
-                          <span className="text-xs font-bold text-slate-300">+91</span>
-                        </div>
-                        <input
-                          id="mobile"
-                          type="tel"
-                          placeholder="9751000001"
-                          value={form.mobile}
-                          onChange={(e) => {
-                            setForm({ ...form, mobile: e.target.value.replace(/\D/g, '') });
-                            setErrors({ ...errors, mobile: '' });
-                          }}
-                          maxLength={10}
-                          inputMode="numeric"
-                          autoComplete="tel"
-                          className={`w-full bg-slate-900/80 border text-white placeholder-slate-500 rounded-xl py-3 pl-16 pr-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all ${
-                            errors.mobile ? 'border-red-500 focus:ring-red-500/30' : 'border-slate-800'
+              {/* Login Form */}
+              <form onSubmit={handleSubmit} className="space-y-5" noValidate>
+                
+                {/* ── A) FARMER MODE (Mobile + OTP / Password) ── */}
+                {loginMode === 'farmer' ? (
+                  <div className="space-y-4">
+                    
+                    {/* Method Toggle: OTP vs Password */}
+                    <div className="flex items-center justify-between text-xs text-slate-500 pb-1">
+                      <span>Login method for farmers:</span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => { setFarmerAuthType('otp'); setErrors({}); }}
+                          className={`font-semibold underline-offset-2 ${
+                            farmerAuthType === 'otp' ? 'text-emerald-700 underline font-bold' : 'hover:text-slate-800'
                           }`}
-                        />
+                        >
+                          OTP Verification
+                        </button>
+                        <span>•</span>
+                        <button
+                          type="button"
+                          onClick={() => { setFarmerAuthType('password'); setErrors({}); }}
+                          className={`font-semibold underline-offset-2 ${
+                            farmerAuthType === 'password' ? 'text-emerald-700 underline font-bold' : 'hover:text-slate-800'
+                          }`}
+                        >
+                          Password
+                        </button>
                       </div>
-                      <button
-                        type="button"
-                        disabled={sendingOtp || countdown > 0 || !/^[6-9]\d{9}$/.test(form.mobile)}
-                        onClick={handleSendOtp}
-                        className="px-4 py-3 bg-slate-800 hover:bg-slate-700 disabled:bg-slate-900 disabled:text-slate-600 border border-slate-700 disabled:border-slate-800 text-emerald-400 disabled:text-slate-600 rounded-xl text-xs font-bold transition flex items-center gap-1.5 flex-shrink-0"
-                      >
-                        {sendingOtp ? (
-                          <span className="animate-pulse">Sending...</span>
-                        ) : countdown > 0 ? (
-                          <span className="flex items-center gap-1">
-                            <Clock className="w-3.5 h-3.5" />
-                            {countdown}s
-                          </span>
-                        ) : otpSent ? (
-                          'Resend OTP'
-                        ) : (
-                          'Get OTP'
-                        )}
-                      </button>
                     </div>
-                    {errors.mobile && (
-                      <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
-                        <span>•</span> {errors.mobile}
-                      </p>
-                    )}
-                  </div>
 
-                  {/* OTP Input & Sandbox Auto-fill Banner */}
-                  {otpSent && (
-                    <div className="space-y-3 pt-2">
-                      <div>
-                        <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                          Enter 6-Digit OTP <span className="text-emerald-400">*</span>
+                    {/* Mobile Number Field with Get OTP Button */}
+                    <div>
+                      <label htmlFor="mobile" className="block text-sm font-normal text-slate-700 mb-1">
+                        Registered Mobile number <span className="text-red-500 font-bold">*</span>
+                      </label>
+                      
+                      <div className="flex flex-col xs:flex-row gap-2">
+                        <div className="relative flex-1">
+                          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center gap-1 text-slate-500 border-r border-gray-300 pr-2 pointer-events-none">
+                            <span className="text-xs font-semibold text-slate-600">+91</span>
+                          </div>
+                          <input
+                            id="mobile"
+                            type="tel"
+                            placeholder="9751000001"
+                            value={form.mobile}
+                            onChange={(e) => {
+                              setForm({ ...form, mobile: e.target.value.replace(/\D/g, '') });
+                              setErrors({ ...errors, mobile: '' });
+                            }}
+                            maxLength={10}
+                            inputMode="numeric"
+                            autoComplete="tel"
+                            className={`w-full bg-white border text-slate-900 placeholder-slate-400 rounded-md py-2.5 pl-14 pr-3 text-base sm:text-sm focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 transition ${
+                              errors.mobile ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          />
+                        </div>
+
+                        {/* Send / Resend OTP button */}
+                        {farmerAuthType === 'otp' && (
+                          <button
+                            type="button"
+                            disabled={sendingOtp || countdown > 0 || !/^[6-9]\d{9}$/.test(form.mobile)}
+                            onClick={handleSendOtp}
+                            className="px-4 py-2.5 bg-gray-100 hover:bg-gray-200 disabled:bg-gray-50 border border-gray-300 disabled:border-gray-200 text-slate-700 disabled:text-gray-400 rounded-md text-xs font-bold transition flex items-center justify-center gap-1.5 shrink-0"
+                          >
+                            {sendingOtp ? (
+                              <span className="animate-pulse">Sending...</span>
+                            ) : countdown > 0 ? (
+                              <span className="flex items-center gap-1">
+                                <Clock className="w-3.5 h-3.5" />
+                                {countdown}s
+                              </span>
+                            ) : otpSent ? (
+                              'Resend OTP'
+                            ) : (
+                              'Get OTP'
+                            )}
+                          </button>
+                        )}
+                      </div>
+
+                      <p className="text-xs text-slate-500 mt-1">
+                        Enter your 10-digit mobile number linked to your PM-Kisan / Aadhaar registration.
+                      </p>
+                      {errors.mobile && (
+                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.mobile}</p>
+                      )}
+                    </div>
+
+                    {/* Conditional: OTP Input */}
+                    {farmerAuthType === 'otp' && (
+                      <div className="space-y-2 pt-1">
+                        <label htmlFor="otp" className="block text-sm font-normal text-slate-700">
+                          Verification OTP <span className="text-red-500 font-bold">*</span>
                         </label>
                         <div className="relative">
-                          <KeyRound className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
                           <input
                             id="otp"
                             type="text"
-                            placeholder="e.g. 123456"
+                            placeholder="Enter 6-digit OTP (e.g. 123456)"
                             value={form.otp}
                             onChange={(e) => {
                               setForm({ ...form, otp: e.target.value.replace(/\D/g, '').slice(0, 6) });
@@ -480,49 +628,85 @@ const LoginPage = () => {
                             }}
                             maxLength={6}
                             inputMode="numeric"
-                            className={`w-full bg-slate-900/80 border text-white placeholder-slate-500 rounded-xl py-3 pl-10 pr-4 text-sm font-semibold tracking-widest focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all ${
-                              errors.otp ? 'border-red-500' : 'border-slate-800'
+                            className={`w-full bg-white border text-slate-900 placeholder-slate-400 rounded-md py-2.5 px-3 text-base sm:text-sm font-semibold tracking-widest focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 transition ${
+                              errors.otp ? 'border-red-500' : 'border-gray-300'
                             }`}
                           />
                         </div>
+
+                        {/* Interactive Sandbox OTP Auto-Fill Badge */}
+                        {currentDemoOtp && (
+                          <div className="flex flex-wrap items-center justify-between gap-2 bg-emerald-50 border border-emerald-200 p-2.5 rounded-md text-xs text-emerald-900">
+                            <div className="flex items-center gap-1.5">
+                              <Zap className="w-3.5 h-3.5 text-emerald-600 fill-emerald-600" />
+                              <span>Test OTP: <strong className="font-mono text-emerald-950 font-bold">{currentDemoOtp}</strong></span>
+                            </div>
+                            <button
+                              type="button"
+                              onClick={() => {
+                                setForm({ ...form, otp: currentDemoOtp });
+                                setErrors({ ...errors, otp: '' });
+                              }}
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-semibold rounded text-[11px] transition shadow-xs"
+                            >
+                              Auto Fill
+                            </button>
+                          </div>
+                        )}
+
+                        <p className="text-xs text-slate-500">
+                          Enter the 6-digit OTP received via SMS (or use test OTP <strong>123456</strong>).
+                        </p>
                         {errors.otp && (
-                          <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
-                            <span>•</span> {errors.otp}
-                          </p>
+                          <p className="text-xs text-red-600 font-medium">{errors.otp}</p>
                         )}
                       </div>
+                    )}
 
-                      {/* Active Sandbox OTP Helper */}
-                      {currentDemoOtp && (
-                        <div className="flex items-center justify-between bg-emerald-950/40 border border-emerald-500/30 p-2.5 rounded-xl text-xs">
-                          <div className="flex items-center gap-1.5 text-emerald-300">
-                            <Zap className="w-3.5 h-3.5 text-emerald-400 fill-emerald-400/20" />
-                            <span>Sandbox OTP Generated: <strong className="text-white tracking-widest">{currentDemoOtp}</strong></span>
-                          </div>
+                    {/* Conditional: Farmer Password Input */}
+                    {farmerAuthType === 'password' && (
+                      <div className="space-y-1 pt-1">
+                        <label htmlFor="farmerPassword" className="block text-sm font-normal text-slate-700">
+                          Account Password <span className="text-red-500 font-bold">*</span>
+                        </label>
+                        <div className="relative">
+                          <input
+                            id="farmerPassword"
+                            type={showPassword ? 'text' : 'password'}
+                            placeholder="Enter your password (e.g. Farmer@123)"
+                            value={form.password}
+                            onChange={(e) => {
+                              setForm({ ...form, password: e.target.value });
+                              setErrors({ ...errors, password: '' });
+                            }}
+                            className={`w-full bg-white border text-slate-900 placeholder-slate-400 rounded-md py-2.5 pl-3 pr-10 text-base sm:text-sm focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 transition ${
+                              errors.password ? 'border-red-500' : 'border-gray-300'
+                            }`}
+                          />
                           <button
                             type="button"
-                            onClick={() => {
-                              setForm({ ...form, otp: currentDemoOtp });
-                              setErrors({ ...errors, otp: '' });
-                            }}
-                            className="px-2.5 py-1 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold rounded-lg text-[11px] transition shadow"
+                            onClick={() => setShowPassword(!showPassword)}
+                            className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition p-1"
+                            aria-label="Toggle password visibility"
                           >
-                            Auto Fill
+                            {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
                           </button>
                         </div>
-                      )}
-                    </div>
-                  )}
-                </div>
-              ) : (
-                <div className="space-y-4">
-                  {/* Employee ID */}
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                      Official Employee ID <span className="text-emerald-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <BadgeCheck className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+                        {errors.password && (
+                          <p className="text-xs text-red-600 font-medium">{errors.password}</p>
+                        )}
+                      </div>
+                    )}
+
+                  </div>
+                ) : (
+                  /* ── B) OFFICER & STAFF MODE (Employee ID + Password) ── */
+                  <div className="space-y-4">
+                    {/* Employee ID */}
+                    <div>
+                      <label htmlFor="employeeId" className="block text-sm font-normal text-slate-700 mb-1">
+                        Username or Employee ID <span className="text-red-500 font-bold">*</span>
+                      </label>
                       <input
                         id="employeeId"
                         type="text"
@@ -533,176 +717,328 @@ const LoginPage = () => {
                           setErrors({ ...errors, employeeId: '' });
                         }}
                         autoComplete="username"
-                        className={`w-full bg-slate-900/80 border text-white placeholder-slate-500 rounded-xl py-3 pl-10 pr-4 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all uppercase ${
-                          errors.employeeId ? 'border-red-500' : 'border-slate-800'
+                        className={`w-full bg-white border text-slate-900 placeholder-slate-400 rounded-md py-2.5 px-3.5 text-base sm:text-sm uppercase focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 transition ${
+                          errors.employeeId ? 'border-red-500' : 'border-gray-300'
                         }`}
                       />
-                    </div>
-                    {errors.employeeId && (
-                      <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
-                        <span>•</span> {errors.employeeId}
+                      <p className="text-xs text-slate-500 mt-1">
+                        Enter your official government Employee ID issued by administration.
                       </p>
-                    )}
-                  </div>
-
-                  {/* Password */}
-                  <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wider text-slate-300 mb-2">
-                      Password <span className="text-emerald-400">*</span>
-                    </label>
-                    <div className="relative">
-                      <Lock className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
-                      <input
-                        id="password"
-                        type={showPassword ? 'text' : 'password'}
-                        placeholder="••••••••••••"
-                        value={form.password}
-                        onChange={(e) => {
-                          setForm({ ...form, password: e.target.value });
-                          setErrors({ ...errors, password: '' });
-                        }}
-                        autoComplete="current-password"
-                        className={`w-full bg-slate-900/80 border text-white placeholder-slate-500 rounded-xl py-3 pl-10 pr-10 text-sm font-medium focus:outline-none focus:ring-2 focus:ring-emerald-500/40 focus:border-emerald-500 transition-all ${
-                          errors.password ? 'border-red-500' : 'border-slate-800'
-                        }`}
-                      />
-                      <button
-                        type="button"
-                        onClick={() => setShowPassword(!showPassword)}
-                        className="absolute right-3.5 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white transition"
-                        aria-label="Toggle password visibility"
-                      >
-                        {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                      </button>
+                      {errors.employeeId && (
+                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.employeeId}</p>
+                      )}
                     </div>
-                    {errors.password && (
-                      <p className="text-xs text-red-400 mt-1.5 flex items-center gap-1">
-                        <span>•</span> {errors.password}
-                      </p>
-                    )}
-                  </div>
-                </div>
-              )}
 
-              {/* Submit CTA Button */}
-              <button
-                type="submit"
-                disabled={loading}
-                className="w-full py-3.5 px-6 rounded-xl bg-gradient-to-r from-emerald-500 via-teal-500 to-emerald-600 hover:from-emerald-400 hover:to-teal-500 text-slate-950 font-extrabold text-sm shadow-lg shadow-emerald-500/25 transition-all duration-200 flex items-center justify-center gap-2 group disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? (
-                  <div className="w-5 h-5 border-2 border-slate-950 border-t-transparent rounded-full animate-spin" />
-                ) : (
-                  <>
-                    <span>{loginMode === 'farmer' ? 'Verify OTP & Secure Login' : 'Sign In to Portal'}</span>
-                    <ArrowRight className="w-4 h-4 group-hover:translate-x-1 transition-transform" />
-                  </>
+                    {/* Password */}
+                    <div>
+                      <label htmlFor="password" className="block text-sm font-normal text-slate-700 mb-1">
+                        Password <span className="text-red-500 font-bold">*</span>
+                      </label>
+                      <div className="relative">
+                        <input
+                          id="password"
+                          type={showPassword ? 'text' : 'password'}
+                          placeholder="Enter your account password"
+                          value={form.password}
+                          onChange={(e) => {
+                            setForm({ ...form, password: e.target.value });
+                            setErrors({ ...errors, password: '' });
+                          }}
+                          autoComplete="current-password"
+                          className={`w-full bg-white border text-slate-900 placeholder-slate-400 rounded-md py-2.5 pl-3.5 pr-10 text-base sm:text-sm focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100 transition ${
+                            errors.password ? 'border-red-500' : 'border-gray-300'
+                          }`}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowPassword(!showPassword)}
+                          className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-slate-600 transition p-1"
+                          aria-label="Toggle password visibility"
+                        >
+                          {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-500 mt-1">
+                        Enter your confidential portal password (default: Admin@123 or Kisan@123).
+                      </p>
+                      {errors.password && (
+                        <p className="text-xs text-red-600 mt-1 font-medium">{errors.password}</p>
+                      )}
+                    </div>
+                  </div>
                 )}
-              </button>
-            </form>
 
-            {/* Footer Navigation Links */}
-            <div className="mt-6 text-center text-xs">
-              {loginMode === 'farmer' ? (
-                <p className="text-slate-400">
-                  Are you a new farmer?{' '}
-                  <Link to="/register" className="text-emerald-400 font-bold hover:underline">
-                    Register New Account →
-                  </Link>
+                {/* Blue Submit Action Button (Matching Screenshot) */}
+                <div className="pt-2">
+                  <button
+                    type="submit"
+                    disabled={loading}
+                    className="w-full sm:w-auto min-w-[120px] px-8 py-2.5 bg-[#026cb6] hover:bg-[#005599] active:bg-[#004480] text-white font-medium text-sm rounded-md shadow-xs transition-colors duration-150 inline-flex items-center justify-center gap-2 disabled:opacity-60 cursor-pointer"
+                  >
+                    {loading ? (
+                      <>
+                        <div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" />
+                        <span>Signing In...</span>
+                      </>
+                    ) : (
+                      <span>Log in</span>
+                    )}
+                  </button>
+                </div>
+
+              </form>
+
+              {/* ── 1-CLICK INTERACTIVE DEMO PERSONAS TOOLBAR ── */}
+              <div className="mt-8 border border-gray-200 rounded-xl bg-gray-50/80 overflow-hidden shadow-xs">
+                <button
+                  type="button"
+                  onClick={() => setShowDemoDrawer(!showDemoDrawer)}
+                  className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-700 bg-gray-100 border-b border-gray-200 hover:bg-gray-200/80 transition"
+                >
+                  <div className="flex items-center gap-2">
+                    <Zap className="w-4 h-4 text-emerald-600" />
+                    <span>Interactive Demo Persona Quick-Fill (One-Click Testing)</span>
+                  </div>
+                  <div className="flex items-center gap-1 text-[11px] text-emerald-700 font-medium">
+                    <span>{showDemoDrawer ? 'Collapse' : 'Expand'}</span>
+                    {showDemoDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+                  </div>
+                </button>
+
+                {showDemoDrawer && (
+                  <div className="p-3 sm:p-4 space-y-3">
+                    {/* Category Tabs */}
+                    <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
+                      {DEMO_CATEGORIES.map((cat) => (
+                        <button
+                          key={cat.id}
+                          type="button"
+                          onClick={() => setActiveDemoCategory(cat.id)}
+                          className={`px-3 py-1.5 rounded-lg text-xs font-semibold whitespace-nowrap transition ${
+                            activeDemoCategory === cat.id
+                              ? 'bg-[#5ca130] text-white shadow-xs'
+                              : 'bg-white border border-gray-200 text-slate-600 hover:bg-gray-100'
+                          }`}
+                        >
+                          {cat.label}
+                        </button>
+                      ))}
+                    </div>
+
+                    {/* Persona Cards Grid */}
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {DEMO_CREDENTIALS[activeDemoCategory]?.map((item, i) => (
+                        <button
+                          key={i}
+                          type="button"
+                          onClick={() => fillDemo(item)}
+                          className="text-left p-3 rounded-lg bg-white hover:bg-emerald-50 border border-gray-200 hover:border-emerald-300 transition flex items-center justify-between group"
+                        >
+                          <div>
+                            <div className="flex items-center gap-1.5">
+                              <span className="font-semibold text-slate-900 group-hover:text-emerald-800">
+                                {item.label}
+                              </span>
+                            </div>
+                            <p className="text-[11px] text-slate-500 font-mono mt-0.5">
+                              ID: {item.mobile || item.id}
+                            </p>
+                            <p className="text-[10px] text-slate-400 mt-0.5">
+                              {item.sub}
+                            </p>
+                          </div>
+                          <span className="text-[11px] font-bold text-emerald-600 opacity-80 group-hover:opacity-100 flex items-center gap-1 shrink-0 ml-2">
+                            Fill <ArrowRight className="w-3 h-3" />
+                          </span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+
+            </div>
+          )}
+
+          {/* TAB CONTENT: 2. RESET PASSWORD */}
+          {activeTab === 'reset' && (
+            <div className="w-full space-y-5 animate-fade-in">
+              <div>
+                <h3 className="text-lg font-semibold text-slate-900">Reset Your Password / Recover Account</h3>
+                <p className="text-sm text-slate-600 mt-1">
+                  Enter your registered mobile number or official Employee ID to receive reset instructions.
                 </p>
+              </div>
+
+              {resetSubmitted ? (
+                <div className="p-4 rounded-xl bg-emerald-50 border border-emerald-200 text-sm text-emerald-900 space-y-3">
+                  <div className="flex items-center gap-2 font-semibold text-emerald-800">
+                    <CheckCircle2 className="w-5 h-5 text-emerald-600" />
+                    <span>Request Processed Successfully</span>
+                  </div>
+                  <p>
+                    Verification instructions have been dispatched for <strong>{resetIdentifier}</strong>.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={() => { setResetSubmitted(false); setActiveTab('login'); }}
+                    className="text-xs font-bold text-emerald-800 hover:underline pt-1 inline-block"
+                  >
+                    ← Return to Log in
+                  </button>
+                </div>
               ) : (
-                <p className="text-slate-400">
-                  Officer credentials are issued by your department administrator.
-                  <br />Need assistance? Contact your supervising authority.
-                </p>
+                <form onSubmit={handleResetSubmit} className="space-y-4">
+                  <div>
+                    <label htmlFor="resetId" className="block text-sm font-normal text-slate-700 mb-1">
+                      Registered Mobile or Employee ID <span className="text-red-500 font-bold">*</span>
+                    </label>
+                    <input
+                      id="resetId"
+                      type="text"
+                      placeholder="e.g. 9751000001 or CPO-001"
+                      value={resetIdentifier}
+                      onChange={(e) => setResetIdentifier(e.target.value)}
+                      className="w-full bg-white border border-gray-300 rounded-md py-2.5 px-3.5 text-base sm:text-sm focus:outline-none focus:border-sky-500 focus:ring-4 focus:ring-sky-100"
+                    />
+                    <p className="text-xs text-slate-500 mt-1">
+                      For farmers, an OTP will be dispatched to your phone. For staff, credentials can be reset by department admin.
+                    </p>
+                  </div>
+
+                  <div className="flex items-center gap-3">
+                    <button
+                      type="submit"
+                      className="px-6 py-2.5 bg-[#026cb6] hover:bg-[#005599] text-white font-medium text-sm rounded-md shadow-xs transition"
+                    >
+                      Submit
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setActiveTab('login')}
+                      className="text-xs font-semibold text-slate-600 hover:text-slate-900"
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </form>
               )}
             </div>
+          )}
 
-            {/* ── INTERACTIVE DEMO CREDENTIALS TOOLBAR ── */}
-            <div className="mt-8 border border-slate-800 rounded-2xl bg-slate-900/60 overflow-hidden backdrop-blur-md">
-              <button
-                type="button"
-                onClick={() => setShowDemoDrawer(!showDemoDrawer)}
-                className="w-full px-4 py-3 flex items-center justify-between text-xs font-semibold text-slate-300 bg-slate-900/90 border-b border-slate-800 hover:bg-slate-800/80 transition"
-              >
-                <div className="flex items-center gap-2">
-                  <Zap className="w-4 h-4 text-emerald-400" />
-                  <span>Interactive Demo Persona Quick-Login</span>
-                </div>
-                <div className="flex items-center gap-1 text-[11px] text-emerald-400 font-normal">
-                  <span>1-Click Fill</span>
-                  {showDemoDrawer ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
-                </div>
-              </button>
+        </div>
+      </main>
 
-              {showDemoDrawer && (
-                <div className="p-3.5 space-y-3">
-                  {/* Category Pills */}
-                  <div className="flex gap-1.5 overflow-x-auto pb-1 scrollbar-none">
-                    {DEMO_CATEGORIES.map((cat) => (
-                      <button
-                        key={cat.id}
-                        type="button"
-                        onClick={() => setActiveDemoCategory(cat.id)}
-                        className={`px-3 py-1 rounded-lg text-[11px] font-semibold whitespace-nowrap transition-all ${
-                          activeDemoCategory === cat.id
-                            ? 'bg-emerald-500 text-slate-950 shadow-sm'
-                            : 'bg-slate-800/70 text-slate-400 hover:text-white'
-                        }`}
-                      >
-                        {cat.label}
-                      </button>
-                    ))}
-                  </div>
+      {/* ── 5. RESPONSIVE "WITH THANKS TO OUR FINANCIAL PARTNERS" FOOTER ── */}
+      <footer className="w-full bg-white border-t border-gray-200 py-8 sm:py-10 px-3 sm:px-6 md:px-8">
+        <div className="max-w-6xl mx-auto space-y-6 sm:space-y-8">
+          
+          {/* Centered Heading */}
+          <h2 className="text-center text-lg sm:text-2xl font-normal text-slate-800 tracking-tight">
+            With thanks to our financial partners
+          </h2>
 
-                  {/* List of Demo Cards */}
-                  <div className="space-y-1.5 max-h-48 overflow-y-auto pr-1 text-xs">
-                    {DEMO_CREDENTIALS[activeDemoCategory]?.map((item, i) => (
-                      <button
-                        key={i}
-                        type="button"
-                        onClick={() => fillDemo(item)}
-                        className="w-full text-left p-2.5 rounded-xl bg-slate-950/70 hover:bg-slate-800 border border-slate-800/80 hover:border-emerald-500/40 transition flex items-center justify-between group"
-                      >
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <span className="font-semibold text-white group-hover:text-emerald-300 transition-colors">
-                              {item.label}
-                            </span>
-                            <span className="text-[10px] px-1.5 py-0.2 rounded bg-slate-800 text-slate-300 font-mono">
-                              {item.mobile || item.id}
-                            </span>
-                          </div>
-                          <p className="text-[11px] text-slate-400 mt-0.5">{item.sub || item.desc}</p>
-                        </div>
-                        <span className="text-[10px] font-bold text-emerald-400 opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-1">
-                          Use <ArrowRight className="w-3 h-3" />
-                        </span>
-                      </button>
-                    ))}
-                  </div>
+          {/* Partner Badges Strip (Responsive grid: 2 on mobile, 3 on tablet, 6 on desktop) */}
+          <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-4 sm:gap-6 items-center justify-items-center opacity-90 hover:opacity-100 transition-opacity">
+            
+            {/* 1. European Commission */}
+            <div className="flex flex-col items-center justify-center p-2 text-center group cursor-default">
+              <div className="w-14 h-10 sm:w-16 sm:h-11 bg-[#003399] rounded flex items-center justify-center relative p-1 shadow-xs border border-blue-900/20">
+                <svg className="w-7 h-7 sm:w-8 sm:h-8 text-yellow-300" viewBox="0 0 24 24" fill="currentColor">
+                  <circle cx="12" cy="4" r="1.2" />
+                  <circle cx="16" cy="5" r="1.2" />
+                  <circle cx="19" cy="8" r="1.2" />
+                  <circle cx="20" cy="12" r="1.2" />
+                  <circle cx="19" cy="16" r="1.2" />
+                  <circle cx="16" cy="19" r="1.2" />
+                  <circle cx="12" cy="20" r="1.2" />
+                  <circle cx="8" cy="19" r="1.2" />
+                  <circle cx="5" cy="16" r="1.2" />
+                  <circle cx="4" cy="12" r="1.2" />
+                  <circle cx="5" cy="8" r="1.2" />
+                  <circle cx="8" cy="5" r="1.2" />
+                </svg>
+              </div>
+              <span className="text-[10px] font-semibold text-slate-700 mt-1.5 leading-tight">
+                European<br />Commission
+              </span>
+            </div>
+
+            {/* 2. German Cooperation */}
+            <div className="flex flex-col items-center justify-center p-2 text-center cursor-default">
+              <div className="w-14 h-9 sm:w-16 sm:h-10 flex flex-col justify-center items-start pl-1">
+                <div className="h-1.5 sm:h-2 w-12 sm:w-14 bg-black rounded-t-xs" />
+                <div className="h-1.5 sm:h-2 w-12 sm:w-14 bg-[#dd0000]" />
+                <div className="h-1.5 sm:h-2 w-12 sm:w-14 bg-[#ffce00] rounded-b-xs" />
+              </div>
+              <span className="text-[10px] font-bold text-slate-800 leading-tight">
+                german<br />cooperation
+              </span>
+              <span className="text-[8px] text-slate-500 uppercase tracking-tighter">
+                DEUTSCHE ZUSAMMENARBEIT
+              </span>
+            </div>
+
+            {/* 3. Swiss Agency for Development (SDC) */}
+            <div className="flex flex-col items-center justify-center p-2 text-center cursor-default">
+              <div className="w-9 h-9 sm:w-10 sm:h-10 bg-[#d52b1e] rounded flex items-center justify-center text-white shadow-xs">
+                <div className="relative w-5 h-5 sm:w-6 sm:h-6 flex items-center justify-center">
+                  <div className="w-4 sm:w-5 h-1 sm:h-1.5 bg-white rounded-xs absolute" />
+                  <div className="w-1 sm:w-1.5 h-4 sm:h-5 bg-white rounded-xs absolute" />
                 </div>
-              )}
+              </div>
+              <span className="text-[9px] font-semibold text-slate-700 mt-1.5 leading-tight">
+                Swiss Agency for Development<br />and Cooperation SDC
+              </span>
+            </div>
+
+            {/* 4. FAO */}
+            <div className="flex flex-col items-center justify-center p-2 text-center cursor-default">
+              <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full border-2 border-[#0072bc] flex items-center justify-center text-[#0072bc]">
+                <Wheat className="w-5 h-5 sm:w-6 sm:h-6" />
+              </div>
+              <span className="text-[9px] font-semibold text-slate-700 mt-1 leading-tight">
+                Food and Agriculture Organization<br />of the United Nations
+              </span>
+            </div>
+
+            {/* 5. LED Liechtenstein */}
+            <div className="flex flex-col items-center justify-center p-2 text-center cursor-default">
+              <div className="w-11 h-9 sm:w-12 sm:h-10 border border-slate-300 rounded flex items-center justify-center text-emerald-800">
+                <Globe className="w-5 h-5 sm:w-6 sm:h-6 text-[#006699]" />
+              </div>
+              <span className="text-[9px] font-bold text-slate-800 mt-1 leading-tight">
+                LED LIECHTENSTEIN<br />DEVELOPMENT SERVICE
+              </span>
+            </div>
+
+            {/* 6. Enabel */}
+            <div className="flex flex-col items-center justify-center p-2 text-center cursor-default">
+              <div className="flex items-center gap-1">
+                <span className="text-lg sm:text-xl font-extrabold text-slate-900 tracking-tight">Enabel</span>
+                <span className="w-2.5 h-2.5 sm:w-3 sm:h-3 rounded-full bg-amber-500 inline-block animate-pulse" />
+              </div>
+              <span className="text-[9px] text-slate-500 font-medium">
+                Belgian Development Agency
+              </span>
             </div>
 
           </div>
 
-          {/* Copyright / SSL Badge */}
-          <div className="mt-8 text-center text-[11px] text-slate-500 flex items-center justify-center gap-4">
-            <span className="flex items-center gap-1">
-              <ShieldCheck className="w-3.5 h-3.5 text-emerald-500" /> 
-              Official Portal Encrypted
-            </span>
-            <span>•</span>
-            <span>Government of India</span>
+          {/* Bottom Copyright & Gov Strip */}
+          <div className="pt-6 border-t border-gray-100 flex flex-col sm:flex-row items-center justify-between text-[11px] text-slate-500 gap-2 text-center sm:text-left">
+            <div className="flex items-center justify-center sm:justify-start gap-1.5">
+              <ShieldCheck className="w-3.5 h-3.5 text-emerald-600 shrink-0" />
+              <span>National Agricultural Digital Procurement Network • Ministry of Agriculture &amp; Farmers Welfare</span>
+            </div>
+            <span>© {new Date().getFullYear()} KisanConnect Portal. All rights reserved.</span>
           </div>
 
         </div>
+      </footer>
 
-      </div>
     </div>
   );
 };
 
 export default LoginPage;
-
